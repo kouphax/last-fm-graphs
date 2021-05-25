@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+    html,
+    body {
+        margin: 0;
+        padding: 0;
+    }
+    
+    .links line {
+        stroke: #999;
+        stroke-opacity: 0.6;
+    }
+    
+    .nodes circle {
+        stroke: #fff;
+        stroke-width: 1.5px;
+    }
+</style>
+<svg id="canvas"></svg>
+<script src="https://d3js.org/d3.v4.min.js"></script>
+<script>
+    const urlParams = new URLSearchParams(window.location.search);
+
+    if (!urlParams.has('aid')) {
+        window.location = "/index2.html"
+    }
+
+    const file = `./data/${urlParams.get("aid")}.json`
+
+    document.getElementById("canvas").setAttribute("height", window.innerHeight)
+    document.getElementById("canvas").setAttribute("width", window.innerWidth)
+
+    //create somewhere to put the force directed graph
+    var svg = d3.select("svg"),
+        width = +svg.attr("width"),
+        height = +svg.attr("height");
+
+    var color = d3.scaleOrdinal([`#e52165`, `#0d1137`, `#AAA`]);
+
+    d3.json(file, function(error, data) {
+
+
+        d3.select("body")
+            .append("div")
+            .html(function() {
+                return `
+                    <h1>${data.artist}</h1>
+                    <a href="./index2.html">Back</a>
+                `
+            })
+            .style("position", "fixed")
+            .style("top", 0)
+            .style("left", 0)
+
+        var artistSize = d3.scaleLinear().domain(d3.extent(data.nodes.filter(n => n.type === "artist").map(s => s.count))).range([5, 20]);
+        var albumSize = d3.scaleLinear().domain(d3.extent(data.nodes.filter(n => n.type === "album").map(s => s.count))).range([5, 20]);
+        var trackSize = d3.scaleLinear().domain(d3.extent(data.nodes.filter(n => n.type === "track").map(s => s.count))).range([5, 20]);
+
+        var simulation = d3.forceSimulation(data.nodes)
+            .force("link", d3.forceLink().id(function(d) {
+                return d.id;
+            }))
+            .force("charge", d3.forceManyBody().strength(-100))
+            .force("center", d3.forceCenter(width / 2, height / 2))
+            //.stop();
+
+        simulation.force("link")
+            .links(data.links);
+
+        simulation.on("tick", tickActions);
+
+        var g = svg.append("g").attr("class", "everything");
+
+        var link = g.append("g")
+            .attr("class", "links")
+            .selectAll("line")
+            .data(data.links)
+            .enter().append("line")
+            .attr("stroke-width", 1)
+            .style("stroke", "#333");
+
+        var node = g.append("g")
+            .attr("class", "nodes")
+            .selectAll("circle")
+            .data(data.nodes)
+            .enter()
+            .append("circle")
+            .attr("r", function(d) {
+                if (d.type === "artist") {
+                    return 20 //artistSize(d.count)
+                } else if (d.type === "album") {
+                    return albumSize(d.count)
+                } else if (d.type === "track") {
+                    return trackSize(d.count)
+                }
+            })
+            .attr("fill", circleColour);
+
+        node.append("title")
+            .text(function(d) {
+                return d.title + " / " + d.count + " plays";
+            });
+
+
+        //add drag capabilities  
+        var drag_handler = d3.drag()
+            .on("start", drag_start)
+            .on("drag", drag_drag)
+            .on("end", drag_end);
+
+        drag_handler(node);
+
+
+        //add zoom capabilities 
+        var zoom_handler = d3.zoom()
+            .on("zoom", zoom_actions);
+
+        zoom_handler(svg);
+
+        /** Functions **/
+
+        //Function to choose what color circle we have
+        //Let's return blue for males and red for females
+        function circleColour(d) {
+            return color(d.type)
+        }
+
+        //Function to choose the line colour and thickness 
+        //If the link type is "A" return green 
+        //If the link type is "E" return red 
+        function linkColour(d) {
+            return "black"
+        }
+
+        //Drag functions 
+        //d is the node 
+        function drag_start(d) {
+            if (!d3.event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+        }
+
+        //make sure you can't drag the circle outside the box
+        function drag_drag(d) {
+            d.fx = d3.event.x;
+            d.fy = d3.event.y;
+        }
+
+        function drag_end(d) {
+            if (!d3.event.active) simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+        }
+
+        //Zoom functions 
+        function zoom_actions() {
+            g.attr("transform", d3.event.transform)
+        }
+
+        function tickActions() {
+            //update circle positions each tick of the simulation 
+            node
+                .attr("cx", function(d) {
+                    return d.x;
+                })
+                .attr("cy", function(d) {
+                    return d.y;
+                });
+
+            //update link positions 
+            link
+                .attr("x1", function(d) {
+                    return d.source.x;
+                })
+                .attr("y1", function(d) {
+                    return d.source.y;
+                })
+                .attr("x2", function(d) {
+                    return d.target.x;
+                })
+                .attr("y2", function(d) {
+                    return d.target.y;
+                });
+        }
+    });
+</script>
